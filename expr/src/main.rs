@@ -3,35 +3,35 @@ use std::str::Chars;
 use std::iter::Peekable;
 use std::iter::Iterator;
 
-trait UniOp {
-    fn calc(&self, a: f32) -> f32; 
+trait UnaryOp {
+    fn calc(&self, a: f64) -> f64; 
 }
 
 trait BinOp {
-    fn calc(&self, a: f32, b: f32) -> f32; 
+    fn calc(&self, a: f64, b: f64) -> f64; 
 }
 
 struct AddOp;
-impl BinOp for AddOp { fn calc(&self, a: f32, b: f32) -> f32 { a + b } }
+impl BinOp for AddOp { fn calc(&self, a: f64, b: f64) -> f64 { a + b } }
 
 struct SubOp;
-impl BinOp for SubOp { fn calc(&self, a: f32, b: f32) -> f32 { a - b } }
+impl BinOp for SubOp { fn calc(&self, a: f64, b: f64) -> f64 { a - b } }
 
 struct MulOp;
-impl BinOp for MulOp { fn calc(&self, a: f32, b: f32) -> f32 { a * b } }
+impl BinOp for MulOp { fn calc(&self, a: f64, b: f64) -> f64 { a * b } }
 
 struct DivOp;
-impl BinOp for DivOp { fn calc(&self, a: f32, b: f32) -> f32 { a / b } }
+impl BinOp for DivOp { fn calc(&self, a: f64, b: f64) -> f64 { a / b } }
 
 struct PosOp;
-impl UniOp for PosOp { fn calc(&self, a: f32) -> f32 { a } }
+impl UnaryOp for PosOp { fn calc(&self, a: f64) -> f64 { a } }
 
 struct NegOp;
-impl UniOp for NegOp { fn calc(&self, a: f32) -> f32 { -a } }
+impl UnaryOp for NegOp { fn calc(&self, a: f64) -> f64 { -a } }
 
 enum OpTypes {
-    ForOne(Box<UniOp>),
-    ForTwo(Box<BinOp>),
+    ForUnary(Box<UnaryOp>),
+    ForBin(Box<BinOp>),
 }
 
 struct OpRec {
@@ -40,31 +40,32 @@ struct OpRec {
 }
 
 impl OpRec {
-    fn new_uni<T>(op: T, pre: i32) -> OpRec where T: UniOp + 'static{
-       OpRec { op: OpTypes::ForOne(Box::new(op)), pre: pre }    
+    fn new_unary<T>(op: T, pre: i32) -> OpRec where T: UnaryOp + 'static{
+       OpRec { op: OpTypes::ForUnary(Box::new(op)), pre: pre }    
     }
 
     fn new_bin<T>(op: T, pre: i32) -> OpRec where T: BinOp + 'static{
-       OpRec { op: OpTypes::ForTwo(Box::new(op)), pre: pre }    
+       OpRec { op: OpTypes::ForBin(Box::new(op)), pre: pre }    
     }
 }
 
-fn get_num(chars: &mut Peekable<Chars>) -> f32 {
+fn get_num(chars: &mut Peekable<Chars>) -> f64 {
     let mut has_dot = false;
-    let mut tens: f32 = 1.0;
-    let mut num: f32 = 0.0;
+    let mut tens: f64 = 1.0;
+    let mut num: f64 = 0.0;
+    let zero_char = '0' as i32;
     loop { 
         match chars.peek() {
             Some(&c) => {
                 match c {
                     '0' ... '9' => {
-                        let dig = (c as i32) - ('0' as i32); 
+                        let dig = ((c as i32) - zero_char) as f64; 
                         if has_dot {
                             tens = tens * 10.0;
-                            num = num + dig as f32 / tens; 
+                            num = num + dig / tens; 
                         }
                         else {
-                            num = num * 10.0 + (dig as f32);
+                            num = num * 10.0 + dig;
                         }
                     }
                     '.' if !has_dot => {
@@ -79,10 +80,10 @@ fn get_num(chars: &mut Peekable<Chars>) -> f32 {
     }
 }
 
-fn get_uni_op(c: char, cur_pre: i32) -> Option<OpRec> {
+fn get_unary_op(c: char, cur_pre: i32) -> Option<OpRec> {
     match c {
-        '+' => Some(OpRec::new_uni(PosOp, cur_pre + 10)),
-        '-' => Some(OpRec::new_uni(NegOp, cur_pre + 10)),
+        '+' => Some(OpRec::new_unary(PosOp, cur_pre + 10)),
+        '-' => Some(OpRec::new_unary(NegOp, cur_pre + 10)),
         _ => None
     }
 }
@@ -99,7 +100,7 @@ fn get_bin_op(c: char, cur_pre: i32) -> Option<OpRec> {
 
 struct ExprParser {
     op_stack: Vec<OpRec>,
-    num_stack: Vec<f32>,
+    num_stack: Vec<f64>,
 }
 
 impl ExprParser {
@@ -110,35 +111,40 @@ impl ExprParser {
         }
     }
     
-    fn pop_op(&mut self, pre: i32, left_to_right: bool) {
-        while self.op_stack.len() > 0 {
-            {
-                let op_rec = self.op_stack.last().unwrap();
-                let should_return = 
-                    if left_to_right { op_rec.pre < pre } 
-                    else { op_rec.pre <= pre };
-                if should_return {
-                    return;
+    fn calc_top_op(&mut self, pre: i32) -> bool {
+        let op_rec = self.op_stack.last().unwrap();
+        let op_pre = op_rec.pre;
+        match op_rec.op {
+            OpTypes::ForUnary(ref op) => {
+                if op_pre <= pre {
+                    return false;
                 }
+                let a = self.num_stack.pop().unwrap();
+                self.num_stack.push(op.calc(a));
             }
-            let op = self.op_stack.pop().unwrap().op;
-            println!("{:?}", self.num_stack);
+            OpTypes::ForBin(ref op) => {
+                if op_pre < pre {
+                    return false;
+                }
+                let b = self.num_stack.pop().unwrap();
+                let a = self.num_stack.pop().unwrap();
+                self.num_stack.push(op.calc(a, b));
+            }
+        }
+        return true;
+    }
 
-            match op {
-                OpTypes::ForOne(ref op) => {
-                    let a = self.num_stack.pop().unwrap();
-                    self.num_stack.push(op.calc(a));
-                }
-                OpTypes::ForTwo(ref op) => {
-                    let b = self.num_stack.pop().unwrap();
-                    let a = self.num_stack.pop().unwrap();
-                    self.num_stack.push(op.calc(a, b));
-                }
+    fn pop_op(&mut self, pre: i32) {
+        while self.op_stack.len() > 0 {
+            println!("{:?}", self.num_stack);
+            if !self.calc_top_op(pre) {
+                return;
             }
+            self.op_stack.pop();
         }
     } 
     
-    fn parse(&mut self, expr: &str) {
+    fn parse(&mut self, expr: &str) -> f64{
         let mut cur_pre = 0;
         let mut chars = expr.chars().peekable();
         let mut is_expect_bin_op = false;
@@ -167,7 +173,7 @@ impl ExprParser {
                     match get_bin_op(c, cur_pre) {
                         Some(op) => {
                             println!("BIN OP: {}, {}", c, op.pre);
-                            self.pop_op(op.pre, true);
+                            self.pop_op(op.pre);
                             self.op_stack.push(op);
                         }
                         None => {
@@ -192,10 +198,10 @@ impl ExprParser {
                         chars.next();
                     }
                     _ => {
-                        match get_uni_op(c, cur_pre) {
+                        match get_unary_op(c, cur_pre) {
                             Some(op) => {
                                 println!("UNI OP: {}, {}", c, op.pre);
-                                self.pop_op(op.pre, false);
+                                self.pop_op(op.pre);
                                 self.op_stack.push(op);
                                 chars.next();
                                 continue;
@@ -206,9 +212,15 @@ impl ExprParser {
                 }
             }
         }
-        self.pop_op(0, true);
+        self.pop_op(0);
         println!("{:?}", self.num_stack);
+        return self.num_stack[0];
     }
+}
+
+fn test(expr: &str) {
+    let mut parser = ExprParser::new();
+    println!("{}={}", expr, parser.parse(expr));
 }
 
 fn main() {
@@ -218,7 +230,8 @@ fn main() {
 //    io::stdin().read_line(&mut expr)
 //        .ok()
 //        .expect("failed to read line");
-       
-    let mut parser = ExprParser::new();
-    parser.parse("1+2*--3.67 * (5.34 - 2)/+.5");
+    test("23.4 + 32 * 5");       
+    test("1++++----212");  
+    test("2*(2-(9.3-2.3))");     
+    test("1+2*--3.67 * (5.34 - 2)/+.5");       
 }
