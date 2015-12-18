@@ -119,11 +119,17 @@ impl ExprParser {
                 if op_pre <= pre {
                     return false;
                 }
+                if self.num_stack.len() < 1 {
+                    return false;
+                }
                 let a = self.num_stack.pop().unwrap();
                 self.num_stack.push(op.calc(a));
             }
             OpTypes::ForBin(ref op) => {
                 if op_pre < pre {
+                    return false;
+                }
+                if self.num_stack.len() < 2 {
                     return false;
                 }
                 let b = self.num_stack.pop().unwrap();
@@ -144,7 +150,7 @@ impl ExprParser {
         }
     } 
     
-    fn parse(&mut self, expr: &str) -> f64{
+    fn parse(&mut self, expr: &str) -> Result<f64, String>{
         let mut cur_pre = 0;
         let mut chars = expr.chars().peekable();
         let mut is_expect_bin_op = false;
@@ -177,7 +183,7 @@ impl ExprParser {
                             self.op_stack.push(op);
                         }
                         None => {
-                            println!("expect binary op but got: {}", c);
+                            return Err(format!("expect binary op but got: {}", c));
                         }
                     }
                     is_expect_bin_op = false;
@@ -206,7 +212,7 @@ impl ExprParser {
                                 chars.next();
                                 continue;
                             }
-                            None => { println!("unexpect {}", c); }
+                            None => { return Err(format!("unexpect {}", c)); }
                         }
                     }
                 }
@@ -214,13 +220,27 @@ impl ExprParser {
         }
         self.pop_op(0);
         println!("{:?}", self.num_stack);
-        return self.num_stack[0];
+        if self.op_stack.len() > 0 {
+            return Err(format!("lack of number"));
+        }
+        if self.num_stack.len() != 1 {
+            return Err(format!("lack of operator"));
+        }
+        return Ok(self.num_stack[0]);
     }
 }
 
 fn test(expr: &str) {
     let mut parser = ExprParser::new();
-    println!("{}={}", expr, parser.parse(expr));
+    print!("{}=", expr);
+    match parser.parse(expr) {
+        Ok(r) => {
+            println!("{}", r);
+        },
+        Err(s) => {
+            println!("{}", s);
+        }
+    }
 }
 
 fn main() {
@@ -230,8 +250,9 @@ fn main() {
 //    io::stdin().read_line(&mut expr)
 //        .ok()
 //        .expect("failed to read line");
-    test("23.4 + 32 * 5");       
-    test("1++++----212");  
-    test("2*(2-(9.3-2.3))");     
-    test("1+2*--3.67 * (5.34 - 2)/+.5");       
+    test("((12-2)");
+    test("23.4 + 32 * 5+");       
+    test("1++++----212 67");  
+//    test("2*(2-(9.3-2.3))");     
+//    test("1+2*--3.67 * (5.34 - 2)/+.5");       
 }
