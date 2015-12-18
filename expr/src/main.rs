@@ -11,23 +11,16 @@ trait BinOp {
     fn calc(&self, a: f64, b: f64) -> f64; 
 }
 
-struct AddOp;
-impl BinOp for AddOp { fn calc(&self, a: f64, b: f64) -> f64 { a + b } }
-
-struct SubOp;
-impl BinOp for SubOp { fn calc(&self, a: f64, b: f64) -> f64 { a - b } }
-
-struct MulOp;
-impl BinOp for MulOp { fn calc(&self, a: f64, b: f64) -> f64 { a * b } }
-
-struct DivOp;
-impl BinOp for DivOp { fn calc(&self, a: f64, b: f64) -> f64 { a / b } }
-
-struct PosOp;
-impl UnaryOp for PosOp { fn calc(&self, a: f64) -> f64 { a } }
-
-struct NegOp;
-impl UnaryOp for NegOp { fn calc(&self, a: f64) -> f64 { -a } }
+macro_rules! define_op{
+    ($tr:ident, $a:ident, $e:expr) => {
+        struct $tr;
+        impl UnaryOp for $tr { fn calc(&self, $a: f64) -> f64 { $e } }
+    };
+    ($tr:ident, $a:ident, $b:ident, $e:expr) => {
+        struct $tr;
+        impl BinOp for $tr { fn calc(&self, $a: f64, $b: f64) -> f64 { $e } }
+    }
+}
 
 enum OpTypes {
     ForUnary(Box<UnaryOp>),
@@ -48,6 +41,13 @@ impl OpRec {
        OpRec { op: OpTypes::ForBin(Box::new(op)), pre: pre }    
     }
 }
+
+define_op!(PosOp, a, a);
+define_op!(NegOp, a, -a);
+define_op!(AddOp, a, b, a + b);
+define_op!(SubOp, a, b, a - b);
+define_op!(MulOp, a, b, a * b);
+define_op!(DivOp, a, b, a / b);
 
 fn get_num(chars: &mut Peekable<Chars>) -> f64 {
     let mut has_dot = false;
